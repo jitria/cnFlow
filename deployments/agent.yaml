@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: agent
+  namespace: cnflow
+  labels:
+    app: agent
+spec:
+  selector:
+    matchLabels:
+      app: agent
+  template:
+    metadata:
+      labels:
+        app: agent
+    spec:
+      hostNetwork: true
+      securityContext:
+        runAsUser: 0
+      containers:
+        - name: agent
+          image: cnflow/agent:latest
+          imagePullPolicy: Never
+          securityContext:
+            privileged: true
+            allowPrivilegeEscalation: true
+            capabilities:
+              add:
+                - NET_ADMIN
+                - SYS_ADMIN
+          command:
+            - "/bin/sh"
+            - "-c"
+            - "ulimit -l unlimited && exec /usr/local/bin/agent"
+          args:
+            - "--managerAddr=0.0.0.0"
+            - "--managerPort=5317"
+          volumeMounts:
+            - name: sys-class-net
+              mountPath: /sys/class/net
+              readOnly: true
+            - name: run-netns
+              mountPath: /run/netns
+              readOnly: true
+            - name: kube-config
+              mountPath: /home/ubuntu/.kube
+              readOnly: true
+      volumes:
+        - name: sys-class-net
+          hostPath:
+            path: /sys/class/net
+        - name: run-netns
+          hostPath:
+            path: /run/netns
+        - name: kube-config
+          hostPath:
+            path: /home/ubuntu/.kube
