@@ -1,0 +1,218 @@
+syntax = "proto3";
+
+package protobuf;
+
+option go_package = "cnFlow/protobuf";
+
+// Represents a single network interface in a namespace.
+message NetworkInterfaceInfo {
+  int32 index         = 1;
+  int32 mtu           = 2;
+  string name         = 3;
+  string mac_address  = 4;
+  repeated string ipv4_addresses = 5;
+  string ipv6_addresses          = 6;
+}
+
+// Represents a network namespace and its interfaces.
+message NetworkNamespaceInfo {
+  string name       = 1;
+  uint64 inode      = 2;
+  repeated NetworkInterfaceInfo interfaces = 3;
+}
+
+// Security context information
+message SecurityContextInfo {
+  bool run_as_non_root       = 1;
+  int64 run_as_user          = 2;
+  int64 run_as_group         = 3;
+  int64 fs_group             = 4;
+  string se_linux_options    = 5;
+  bool privileged            = 6;
+  bool allow_privilege_escalation = 7;
+  repeated string capabilities_add = 8;
+  repeated string capabilities_drop = 9;
+}
+
+// Service account information
+message ServiceAccountInfo {
+  string name                    = 1;
+  string namespace               = 2;
+  bool automount_service_account_token = 3;
+  repeated string secrets        = 4;
+  repeated string image_pull_secrets = 5;
+}
+
+// Geo location information
+message GeoInfo {
+  string country     = 1;
+  string region      = 2;
+  string city        = 3;
+  string timezone    = 4;
+  double latitude    = 5;
+  double longitude   = 6;
+  string isp         = 7;
+  string org         = 8;
+  string as_name     = 9;
+  int32 as_number    = 10;
+}
+
+/////////
+// Pod //
+/////////
+
+// Pod metadata + network namespace info.
+message PodInfo {
+  string name        = 1;
+  string namespace   = 2;
+  string phase       = 3;
+  string pod_ip      = 4;
+  string pod_uid     = 5;
+  string node        = 6;
+  string host_ip     = 7;
+  bool   host_network = 8;
+  NetworkNamespaceInfo netns_info = 9;
+
+  ServiceAccountInfo service_account = 11;
+  SecurityContextInfo security_context = 12;
+}
+
+//////////
+// Node //
+//////////
+
+// Node metadata + network namespace info.
+message NodeInfo {
+  string name             = 1;
+  string uid              = 2;
+  string status           = 3;
+  string host_ip          = 4;
+  string kubelet_version  = 5;
+  string os_image         = 6;
+  map<string,string> allocatable = 7;
+  map<string,string> capacity    = 8;
+  NetworkNamespaceInfo netns_info = 9;
+  
+  GeoInfo geo_info        = 11;
+}
+
+/////////////
+// Network //
+/////////////
+
+// Base network event information
+message BaseNetworkEvent {
+  // IP Header Fields
+  uint32 src_addr      = 1;
+  uint32 dst_addr      = 2;
+  uint32 ip_tos        = 3;
+  uint32 ip_total_len  = 4;
+  uint32 ip_id         = 5;
+  uint32 ip_frag_off   = 6;
+  uint32 ip_ttl        = 7;
+  uint32 ip_protocol   = 8;
+  uint32 ip_check      = 9;
+  
+  // Port Fields
+  uint32 src_port      = 11;
+  uint32 dst_port      = 12;
+  
+  // TCP Header Fields
+  uint32 seq           = 21;
+  uint32 ack_seq       = 22;
+  uint32 tcp_flags     = 23;
+  uint32 window        = 24;
+  uint32 tcp_check     = 25;
+  
+  // UDP Header Fields
+  uint32 udp_len       = 31;
+  uint32 udp_check     = 32;
+  
+  // Metadata
+  uint64 timestamp_ns  = 41;
+  uint32 payload_size  = 42;
+}
+
+// HTTP event information
+message HTTPEvent {
+  BaseNetworkEvent base = 1;
+  string method         = 2;
+  string uri            = 3;
+  string status_code    = 4;
+  bool is_request       = 5;
+}
+
+// HTTP/2 event information
+message HTTP2Event {
+  BaseNetworkEvent base = 1;
+  uint32 frame_length   = 2;
+  uint32 frame_type     = 3;
+  uint32 frame_flags    = 4;
+  uint32 stream_id      = 5;
+  bytes payload         = 6;
+}
+
+// DNS event information
+message DNSEvent {
+  BaseNetworkEvent base = 1;
+  uint32 transaction_id = 2;
+  uint32 query_type     = 3;
+  string query_name     = 4;
+  uint32 response_code  = 5;
+  bool is_query         = 6;
+}
+
+// Redis event information
+message RedisEvent {
+  BaseNetworkEvent base = 1;
+  uint32 command_type   = 2;
+  uint32 resp_type      = 3;
+  bytes payload         = 4;
+}
+
+// ICMP event information
+message ICMPEvent {
+  BaseNetworkEvent base = 1;
+  uint32 type           = 2;
+  uint32 code           = 3;
+  uint32 id             = 4;
+  uint32 sequence       = 5;
+}
+
+// Kafka event information
+message KafkaEvent {
+  BaseNetworkEvent base = 1;
+  uint32 api_key        = 2;
+  uint32 api_version    = 3;
+  uint32 correlation_id = 4;
+  bytes payload         = 5;
+}
+
+/////////
+// ACK //
+/////////
+
+// Acknowledgement from manager.
+message Ack {
+  bool success = 1;
+}
+
+/////////////
+// Service //
+/////////////
+
+service ictc {
+  // Agents stream PodInfo messages to the manager.
+  rpc SyncPods (stream PodInfo) returns (Ack);
+
+  // Agents stream NodeInfo messages to the manager.
+  rpc SyncNodes (stream NodeInfo) returns (Ack);
+
+  // Network events streaming
+  rpc HTTPEvents (stream HTTPEvent) returns (Ack);
+  rpc HTTP2Events (stream HTTP2Event) returns (Ack);
+  rpc DNSEvents (stream DNSEvent) returns (Ack);
+  rpc RedisEvents (stream RedisEvent) returns (Ack);
+  rpc ICMPEvents (stream ICMPEvent) returns (Ack);
+  rpc KafkaEvents (stream KafkaEvent) returns (Ack);
+}
